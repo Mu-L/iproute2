@@ -377,9 +377,6 @@ Display TCP sockets.
 .B \-u, \-\-udp
 Display UDP sockets.
 .TP
-.B \-d, \-\-dccp
-Display DCCP sockets.
-.TP
 .B \-w, \-\-raw
 Display RAW sockets.
 .TP
@@ -411,7 +408,7 @@ supported: unix, inet, inet6, link, netlink, vsock, tipc, xdp.
 .B \-A QUERY, \-\-query=QUERY, \-\-socket=QUERY
 List of socket tables to dump, separated by commas. The following identifiers
 are understood: all, inet, tcp, udp, raw, unix, packet, netlink, unix_dgram,
-unix_stream, unix_seqpacket, packet_raw, packet_dgram, dccp, sctp, tipc,
+unix_stream, unix_seqpacket, packet_raw, packet_dgram, sctp, tipc,
 vsock_stream, vsock_dgram, xdp, mptcp. Any item in the list may optionally be
 prefixed by an exclamation mark
 .RB ( ! )
