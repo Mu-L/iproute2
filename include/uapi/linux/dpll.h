@@ -109,10 +109,12 @@ enum dpll_clock_quality_level {
  * enum dpll_type - type of dpll, valid values for DPLL_A_TYPE attribute
  * @DPLL_TYPE_PPS: dpll produces Pulse-Per-Second signal
  * @DPLL_TYPE_EEC: dpll drives the Ethernet Equipment Clock
+ * @DPLL_TYPE_GENERIC: generic dpll type for devices outside PPS/EEC classes
  */
 enum dpll_type {
 	DPLL_TYPE_PPS = 1,
 	DPLL_TYPE_EEC,
+	DPLL_TYPE_GENERIC,
 
 	/* private: */
 	__DPLL_TYPE_MAX,
@@ -127,6 +129,9 @@ enum dpll_type {
  * @DPLL_PIN_TYPE_SYNCE_ETH_PORT: ethernet port PHY's recovered clock
  * @DPLL_PIN_TYPE_INT_OSCILLATOR: device internal oscillator
  * @DPLL_PIN_TYPE_GNSS: GNSS recovered clock
+ * @DPLL_PIN_TYPE_INT_NCO: Device internal numerically controlled oscillator.
+ *   When connected as a DPLL input, the DPLL enters NCO mode where the output
+ *   frequency is adjusted by the host via the PTP clock interface.
  */
 enum dpll_pin_type {
 	DPLL_PIN_TYPE_MUX = 1,
@@ -134,6 +139,7 @@ enum dpll_pin_type {
 	DPLL_PIN_TYPE_SYNCE_ETH_PORT,
 	DPLL_PIN_TYPE_INT_OSCILLATOR,
 	DPLL_PIN_TYPE_GNSS,
+	DPLL_PIN_TYPE_INT_NCO,
 
 	/* private: */
 	__DPLL_PIN_TYPE_MAX,
@@ -206,11 +212,15 @@ enum dpll_pin_operstate {
  * @DPLL_PIN_CAPABILITIES_DIRECTION_CAN_CHANGE: pin direction can be changed
  * @DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE: pin priority can be changed
  * @DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE: pin state can be changed
+ * @DPLL_PIN_CAPABILITIES_STATE_CONNECTED_OVERRIDE: pin state can be set to
+ *   connected regardless of current DPLL device mode, overriding the active
+ *   input selection. Requires state-can-change to be set as well.
  */
 enum dpll_pin_capabilities {
 	DPLL_PIN_CAPABILITIES_DIRECTION_CAN_CHANGE = 1,
 	DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE = 2,
 	DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE = 4,
+	DPLL_PIN_CAPABILITIES_STATE_CONNECTED_OVERRIDE = 8,
 };
 
 #define DPLL_PHASE_OFFSET_DIVIDER		1000
