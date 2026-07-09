@@ -287,6 +287,7 @@ ip-link \- network device configuration
 .BR netdevsim " |"
 .BR netkit " |"
 .BR nlmon " |"
+.BR ovpn " |"
 .BR pfcp " |"
 .BR rmnet " |"
 .BR sit " |"
@@ -429,6 +430,9 @@ Link types:
 .sp
 .BR nlmon
 - Netlink monitoring device
+.sp
+.BR ovpn
+- OpenVPN Data Channel Offload device
 .sp
 .BR pfcp
 - Packet Forwarding Control Protocol device
@@ -1348,6 +1352,26 @@ the following additional arguments are supported:
 
 .BI  mode " MODE "
 - specifies the mode (datagram or connected) to use.
+
+.TP
+OVPN Type Support
+For a link of type
+.I OVPN
+the following additional arguments are supported:
+
+.BI "ip link add " DEVICE
+.BR "type ovpn " [ " mode " "{ " p2p " | " mp " }" " ]"
+
+.in +8
+.sp
+.BR mode " { " p2p " | " mp " }"
+- selects the OpenVPN device mode. The default,
+.BR p2p ,
+creates a point-to-point device for a single peer. The
+.B mp
+mode creates a multi-peer device.
+
+.in -8
 
 .TP
 ERSPAN Type Support
