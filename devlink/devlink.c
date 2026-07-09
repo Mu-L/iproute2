@@ -3516,11 +3516,145 @@ static const struct param_val_conv param_val_conv[] = {
 
 #define PARAM_VAL_CONV_LEN ARRAY_SIZE(param_val_conv)
 
+struct devlink_param_u64_array {
+	uint64_t size;
+	uint64_t *val;
+};
+
+static void param_value_u64_array_free(struct devlink_param_u64_array *arr)
+{
+	free(arr->val);
+	arr->val = NULL;
+	arr->size = 0;
+}
+
+static int param_value_nested_u64_attr_cb(const struct nlattr *attr, void *data)
+{
+	struct devlink_param_u64_array *arr = data;
+	uint64_t *new_val;
+	unsigned int len;
+	uint64_t val;
+
+	if (mnl_attr_get_type(attr) != DEVLINK_ATTR_PARAM_VALUE_DATA)
+		return MNL_CB_OK;
+
+	len = mnl_attr_get_payload_len(attr);
+	if (len == sizeof(uint32_t))
+		val = mnl_attr_get_u32(attr);
+	else if (len == sizeof(uint64_t))
+		val = mnl_attr_get_u64(attr);
+	else
+		return MNL_CB_ERROR;
+
+	new_val = realloc(arr->val, (arr->size + 1) * sizeof(uint64_t));
+	if (!new_val)
+		return MNL_CB_ERROR;
+	arr->val = new_val;
+
+	arr->val[arr->size] = val;
+	arr->size++;
+
+	return MNL_CB_OK;
+}
+
+static int param_value_u64_array_fill(struct nlattr *nl,
+				      struct devlink_param_u64_array *arr)
+{
+	int err;
+
+	param_value_u64_array_free(arr);
+	err = mnl_attr_parse_nested(nl, param_value_nested_u64_attr_cb, arr);
+	if (err != MNL_CB_OK) {
+		param_value_u64_array_free(arr);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static bool param_value_u64_array_equal(const struct devlink_param_u64_array *a,
+					const struct devlink_param_u64_array *b)
+{
+	uint64_t i;
+
+	if (a->size != b->size)
+		return false;
+
+	for (i = 0; i < a->size; i++) {
+		if (a->val[i] != b->val[i])
+			return false;
+	}
+
+	return true;
+}
+
+static int param_value_u64_array_put_from_str(struct nlmsghdr *nlh,
+					      const char *param_value,
+					      const struct devlink_param_u64_array *cur)
+{
+	struct devlink_param_u64_array new_arr = {};
+	char *copy, *token, *saveptr = NULL;
+	uint64_t val, *new_val;
+	char delim[] = " ,";
+	uint64_t i;
+	int err;
+
+	copy = strdup(param_value);
+	if (!copy)
+		return -ENOMEM;
+
+	token = strtok_r(copy, delim, &saveptr);
+	while (token) {
+		err = get_u64((__u64 *)&val, token, 10);
+		if (err) {
+			free(copy);
+			param_value_u64_array_free(&new_arr);
+			pr_err("Value \"%s\" is not a number or not within range\n",
+			       token);
+			return err;
+		}
+
+		new_val = realloc(new_arr.val, (new_arr.size + 1) * sizeof(uint64_t));
+		if (!new_val) {
+			free(copy);
+			param_value_u64_array_free(&new_arr);
+			return -ENOMEM;
+		}
+		new_arr.val = new_val;
+
+		new_arr.val[new_arr.size] = val;
+		new_arr.size++;
+		token = strtok_r(NULL, delim, &saveptr);
+	}
+	free(copy);
+
+	if (!new_arr.size) {
+		param_value_u64_array_free(&new_arr);
+		pr_err("Value must contain at least one element\n");
+		return -EINVAL;
+	}
+
+	/* Check current and new values. If both are equal, bail out */
+	if (cur && param_value_u64_array_equal(&new_arr, cur)) {
+		param_value_u64_array_free(&new_arr);
+		return 1;
+	}
+
+	for (i = 0; i < new_arr.size; i++)
+		mnl_attr_put_u64(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, new_arr.val[i]);
+
+	param_value_u64_array_free(&new_arr);
+	return 0;
+}
+
 static int pr_out_param_value_print(const char *nla_name, int nla_type,
 				     struct nlattr *val_attr, bool conv_exists,
-				     const char *label, bool flag_as_u8)
+				     const char *label, bool flag_as_u8,
+				     struct nlattr *u64_arr_nl)
 {
+	struct devlink_param_u64_array u64_arr = { };
 	const char *vstr;
+	uint64_t i;
 	int err;
 
 	print_string(PRINT_FP, NULL, " %s ", label);
@@ -3582,6 +3716,23 @@ static int pr_out_param_value_print(const char *nla_name, int nla_type,
 		else
 			print_bool(PRINT_ANY, label, "%s", val_attr);
 		break;
+	case DEVLINK_VAR_ATTR_TYPE_U64_ARRAY:
+		err = param_value_u64_array_fill(u64_arr_nl, &u64_arr);
+		if (err)
+			return err;
+
+		if (is_json_context()) {
+			open_json_array(PRINT_JSON, label);
+			for (i = 0; i < u64_arr.size; i++)
+				print_u64(PRINT_JSON, NULL, NULL, u64_arr.val[i]);
+			close_json_array(PRINT_JSON, NULL);
+		} else {
+			for (i = 0; i < u64_arr.size; i++)
+				print_u64(PRINT_FP, NULL, "%llu ", u64_arr.val[i]);
+		}
+
+		param_value_u64_array_free(&u64_arr);
+		break;
 	}
 
 	return 0;
@@ -3601,6 +3752,7 @@ static void pr_out_param_value(struct dl *dl, const char *nla_name,
 
 	if (!nla_value[DEVLINK_ATTR_PARAM_VALUE_CMODE] ||
 	    (nla_type != MNL_TYPE_FLAG &&
+	     nla_type != DEVLINK_VAR_ATTR_TYPE_U64_ARRAY &&
 	     !nla_value[DEVLINK_ATTR_PARAM_VALUE_DATA]))
 		return;
 
@@ -3614,14 +3766,15 @@ static void pr_out_param_value(struct dl *dl, const char *nla_name,
 					    nla_name);
 
 	err = pr_out_param_value_print(nla_name, nla_type, val_attr,
-				       conv_exists, "value", false);
+				       conv_exists, "value", false, nl);
 	if (err)
 		return;
 
 	val_attr = nla_value[DEVLINK_ATTR_PARAM_VALUE_DEFAULT];
 	if (val_attr) {
 		err = pr_out_param_value_print(nla_name, nla_type, val_attr,
-					       conv_exists, "default", true);
+					       conv_exists, "default", true,
+					       val_attr);
 		if (err)
 			return;
 	}
@@ -3704,6 +3857,7 @@ struct param_ctx {
 		uint64_t vu64;
 		const char *vstr;
 		bool vbool;
+		struct devlink_param_u64_array u64arr;
 	} value;
 };
 
@@ -3745,6 +3899,7 @@ static int cmd_dev_param_set_cb(const struct nlmsghdr *nlh, void *data)
 
 		if (!nla_value[DEVLINK_ATTR_PARAM_VALUE_CMODE] ||
 		    (nla_type != MNL_TYPE_FLAG &&
+		     nla_type != DEVLINK_VAR_ATTR_TYPE_U64_ARRAY &&
 		     !nla_value[DEVLINK_ATTR_PARAM_VALUE_DATA]))
 			return MNL_CB_ERROR;
 
@@ -3770,6 +3925,12 @@ static int cmd_dev_param_set_cb(const struct nlmsghdr *nlh, void *data)
 				break;
 			case DEVLINK_VAR_ATTR_TYPE_FLAG:
 				ctx->value.vbool = val_attr ? true : false;
+				break;
+			case DEVLINK_VAR_ATTR_TYPE_U64_ARRAY:
+				err = param_value_u64_array_fill(param_value_attr,
+								 &ctx->value.u64arr);
+				if (err)
+					return MNL_CB_ERROR;
 				break;
 			}
 			break;
@@ -3818,10 +3979,11 @@ static int cmd_dev_param_set(struct dl *dl)
 	ctx.dl = dl;
 	err = mnlu_gen_socket_sndrcv(&dl->nlg, nlh, cmd_dev_param_set_cb, &ctx);
 	if (err)
-		return err;
+		goto out;
 	if (!ctx.cmode_found) {
 		pr_err("Configuration mode not supported\n");
-		return -ENOTSUP;
+		err = -ENOTSUP;
+		goto out;
 	}
 
 	if (dl->opts.present & DL_OPT_PARAM_SET_DEFAULT) {
@@ -3829,7 +3991,8 @@ static int cmd_dev_param_set(struct dl *dl)
 				       NLM_F_REQUEST | NLM_F_ACK);
 		dl_opts_put(nlh, dl);
 		mnl_attr_put_u8(nlh, DEVLINK_ATTR_PARAM_TYPE, ctx.nla_type);
-		return mnlu_gen_socket_sndrcv(&dl->nlg, nlh, NULL, NULL);
+		err = mnlu_gen_socket_sndrcv(&dl->nlg, nlh, NULL, NULL);
+		goto out;
 	}
 
 	nlh = mnlu_gen_socket_cmd_prepare(&dl->nlg, DEVLINK_CMD_PARAM_SET,
@@ -3855,7 +4018,7 @@ static int cmd_dev_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u8 == ctx.value.vu8)
-			return 0;
+			goto out;
 		mnl_attr_put_u8(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u8);
 		break;
 	case DEVLINK_VAR_ATTR_TYPE_U16:
@@ -3872,7 +4035,7 @@ static int cmd_dev_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u16 == ctx.value.vu16)
-			return 0;
+			goto out;
 		mnl_attr_put_u16(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u16);
 		break;
 	case DEVLINK_VAR_ATTR_TYPE_U32:
@@ -3889,7 +4052,7 @@ static int cmd_dev_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u32 == ctx.value.vu32)
-			return 0;
+			goto out;
 		mnl_attr_put_u32(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u32);
 		break;
 	case DEVLINK_VAR_ATTR_TYPE_U64:
@@ -3904,7 +4067,7 @@ static int cmd_dev_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u64 == ctx.value.vu64)
-			return 0;
+			goto out;
 		mnl_attr_put_u64(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u64);
 		break;
 	case DEVLINK_VAR_ATTR_TYPE_FLAG:
@@ -3912,7 +4075,7 @@ static int cmd_dev_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_bool == ctx.value.vbool)
-			return 0;
+			goto out;
 		if (val_bool)
 			mnl_attr_put(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA,
 				     0, NULL);
@@ -3921,17 +4084,32 @@ static int cmd_dev_param_set(struct dl *dl)
 		mnl_attr_put_strz(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA,
 				  dl->opts.param_value);
 		if (!strcmp(dl->opts.param_value, ctx.value.vstr))
-			return 0;
+			goto out;
+		break;
+	case DEVLINK_VAR_ATTR_TYPE_U64_ARRAY:
+		err = param_value_u64_array_put_from_str(nlh, dl->opts.param_value,
+							 &ctx.value.u64arr);
+		if (err == 1) {
+			err = 0;
+			goto out;
+		}
+		if (err)
+			goto out;
 		break;
 	default:
 		printf("Value type not supported\n");
-		return -ENOTSUP;
+		err = -ENOTSUP;
+		goto out;
 	}
-	return mnlu_gen_socket_sndrcv(&dl->nlg, nlh, NULL, NULL);
+	err = mnlu_gen_socket_sndrcv(&dl->nlg, nlh, NULL, NULL);
+	goto out;
 
 err_param_value_parse:
 	pr_err("Value \"%s\" is not a number or not within range\n",
 	       dl->opts.param_value);
+
+out:
+	param_value_u64_array_free(&ctx.value.u64arr);
 	return err;
 }
 
@@ -5369,6 +5547,7 @@ static int cmd_port_param_set_cb(const struct nlmsghdr *nlh, void *data)
 
 		if (!nla_value[DEVLINK_ATTR_PARAM_VALUE_CMODE] ||
 		    (nla_type != MNL_TYPE_FLAG &&
+		     nla_type != DEVLINK_VAR_ATTR_TYPE_U64_ARRAY &&
 		     !nla_value[DEVLINK_ATTR_PARAM_VALUE_DATA]))
 			return MNL_CB_ERROR;
 
@@ -5390,6 +5569,12 @@ static int cmd_port_param_set_cb(const struct nlmsghdr *nlh, void *data)
 				break;
 			case MNL_TYPE_FLAG:
 				ctx->value.vbool = val_attr ? true : false;
+				break;
+			case DEVLINK_VAR_ATTR_TYPE_U64_ARRAY:
+				err = param_value_u64_array_fill(param_value_attr,
+								 &ctx->value.u64arr);
+				if (err)
+					return MNL_CB_ERROR;
 				break;
 			}
 			break;
@@ -5426,7 +5611,7 @@ static int cmd_port_param_set(struct dl *dl)
 	ctx.dl = dl;
 	err = mnlu_gen_socket_sndrcv(&dl->nlg, nlh, cmd_port_param_set_cb, &ctx);
 	if (err)
-		return err;
+		goto out;
 
 	nlh = mnlu_gen_socket_cmd_prepare(&dl->nlg, DEVLINK_CMD_PORT_PARAM_SET,
 					  NLM_F_REQUEST | NLM_F_ACK);
@@ -5451,7 +5636,7 @@ static int cmd_port_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u8 == ctx.value.vu8)
-			return 0;
+			goto out;
 		mnl_attr_put_u8(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u8);
 		break;
 	case MNL_TYPE_U16:
@@ -5468,7 +5653,7 @@ static int cmd_port_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u16 == ctx.value.vu16)
-			return 0;
+			goto out;
 		mnl_attr_put_u16(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u16);
 		break;
 	case MNL_TYPE_U32:
@@ -5485,7 +5670,7 @@ static int cmd_port_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u32 == ctx.value.vu32)
-			return 0;
+			goto out;
 		mnl_attr_put_u32(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u32);
 		break;
 	case MNL_TYPE_U64:
@@ -5500,7 +5685,7 @@ static int cmd_port_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_u64 == ctx.value.vu64)
-			return 0;
+			goto out;
 		mnl_attr_put_u64(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA, val_u64);
 		break;
 	case MNL_TYPE_FLAG:
@@ -5508,7 +5693,7 @@ static int cmd_port_param_set(struct dl *dl)
 		if (err)
 			goto err_param_value_parse;
 		if (val_bool == ctx.value.vbool)
-			return 0;
+			goto out;
 		if (val_bool)
 			mnl_attr_put(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA,
 				     0, NULL);
@@ -5517,17 +5702,32 @@ static int cmd_port_param_set(struct dl *dl)
 		mnl_attr_put_strz(nlh, DEVLINK_ATTR_PARAM_VALUE_DATA,
 				  dl->opts.param_value);
 		if (!strcmp(dl->opts.param_value, ctx.value.vstr))
-			return 0;
+			goto out;
+		break;
+	case DEVLINK_VAR_ATTR_TYPE_U64_ARRAY:
+		err = param_value_u64_array_put_from_str(nlh, dl->opts.param_value,
+							 &ctx.value.u64arr);
+		if (err == 1) {
+			err = 0;
+			goto out;
+		}
+		if (err)
+			goto out;
 		break;
 	default:
 		printf("Value type not supported\n");
-		return -ENOTSUP;
+		err = -ENOTSUP;
+		goto out;
 	}
-	return mnlu_gen_socket_sndrcv(&dl->nlg, nlh, NULL, NULL);
+	err = mnlu_gen_socket_sndrcv(&dl->nlg, nlh, NULL, NULL);
+	goto out;
 
 err_param_value_parse:
 	pr_err("Value \"%s\" is not a number or not within range\n",
 	       dl->opts.param_value);
+
+out:
+	param_value_u64_array_free(&ctx.value.u64arr);
 	return err;
 }
 
