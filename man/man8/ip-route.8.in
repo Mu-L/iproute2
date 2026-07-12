@@ -246,7 +246,9 @@ throw " | " unreachable " | " prohibit " | " blackhole " | " nat " ]"
 .B segs
 .IR SEGMENTS " [ "
 .B hmac
-.IR KEYID " ]"
+.IR KEYID " ] [ "
+.B lookup
+.IR TABLEID " ]"
 
 .ti -8
 .IR ENCAP_SEG6LOCAL " := "
@@ -910,6 +912,18 @@ configuration and dynamic resolution.
 
 .I KEYID
 - Numerical value in decimal representation. See \fBip-sr\fR(8).
+.sp
+
+.B lookup
+.I TABLEID
+- Table for the post-encap SID route lookup, i.e. looking up the
+route for the first SID.
+.I TABLEID
+is either a number or a string from
+.BR @SYSCONF_USR_DIR@/rt_tables " or " @SYSCONF_ETC_DIR@/rt_tables
+(has precedence if exists); table id 0 is not a valid value.
+When omitted, this lookup uses the current routing context, e.g. tables
+selected according to the routing policy database.
 .in -2
 .sp
 
