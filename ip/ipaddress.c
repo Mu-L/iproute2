@@ -25,6 +25,7 @@
 #include <linux/if_infiniband.h>
 #include <linux/sockios.h>
 #include <linux/net_namespace.h>
+#include <linux/dpll.h>
 
 #include "rt_names.h"
 #include "utils.h"
@@ -1293,6 +1294,18 @@ int print_linkinfo(struct nlmsghdr *n, void *arg)
 				     "parentdev",
 				     "parentdev %s ",
 				     rta_getattr_str(tb[IFLA_PARENT_DEV_NAME]));
+		}
+
+		if (tb[IFLA_DPLL_PIN]) {
+			struct rtattr *dp[DPLL_A_PIN_MAX + 1];
+
+			parse_rtattr_nested(dp, DPLL_A_PIN_MAX,
+					    tb[IFLA_DPLL_PIN]);
+			if (dp[DPLL_A_PIN_ID])
+				print_uint(PRINT_ANY,
+					   "dpll_pin",
+					   "dpll-pin %u ",
+					   rta_getattr_u32(dp[DPLL_A_PIN_ID]));
 		}
 	}
 
