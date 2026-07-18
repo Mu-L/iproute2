@@ -27,6 +27,7 @@
 
 static struct {
 	char *dev;
+	int  index;
 	int  family;
 } filter;
 
@@ -207,6 +208,93 @@ static void read_igmp6(struct ma_info **result_p)
 	fclose(fp);
 }
 
+struct maddr_dump_ctx {
+	struct ma_info *list;
+	bool mc_users_missing;
+};
+
+static int maddr_dump_filter(struct nlmsghdr *nlh, int reqlen)
+{
+	struct ifaddrmsg *ifm = NLMSG_DATA(nlh);
+
+	ifm->ifa_index = filter.index;
+
+	return 0;
+}
+
+static int accept_maddr(struct nlmsghdr *n, void *arg)
+{
+	struct maddr_dump_ctx *ctx = arg;
+	struct ifaddrmsg *ifm = NLMSG_DATA(n);
+	int len = n->nlmsg_len - NLMSG_LENGTH(sizeof(*ifm));
+	struct rtattr *tb[IFA_MAX + 1];
+	struct ma_info *ma;
+
+	if (n->nlmsg_type != RTM_GETMULTICAST)
+		return 0;
+
+	if (len < 0)
+		return -1;
+
+	if (filter.index && filter.index != ifm->ifa_index)
+		return 0;
+
+	parse_rtattr(tb, IFA_MAX, IFA_RTA(ifm), len);
+
+	if (!tb[IFA_MULTICAST] ||
+	    RTA_PAYLOAD(tb[IFA_MULTICAST]) > sizeof(ma->addr.data))
+		return 0;
+
+	if (!tb[IFA_MC_USERS]) {
+		ctx->mc_users_missing = true;
+		return 0;
+	}
+
+	ma = calloc(1, sizeof(*ma));
+	if (ma == NULL)
+		return -1;
+
+	ma->index = ifm->ifa_index;
+	strlcpy(ma->name, ll_index_to_name(ifm->ifa_index), sizeof(ma->name));
+	ma->addr.family = ifm->ifa_family;
+	ma->addr.bytelen = RTA_PAYLOAD(tb[IFA_MULTICAST]);
+	ma->addr.bitlen = ma->addr.bytelen << 3;
+	memcpy(ma->addr.data, RTA_DATA(tb[IFA_MULTICAST]), ma->addr.bytelen);
+	ma->users = rta_getattr_u32(tb[IFA_MC_USERS]);
+	maddr_ins(&ctx->list, ma);
+
+	return 0;
+}
+
+static int read_maddr_netlink(int family, struct ma_info **result_p)
+{
+	struct maddr_dump_ctx ctx = {};
+	struct ma_info *ma;
+	int err;
+
+	rth.flags |= RTNL_HANDLE_F_SUPPRESS_NLERR;
+	err = rtnl_mcaddrdump_req(&rth, family,
+				  filter.index ? maddr_dump_filter : NULL);
+	if (err >= 0)
+		err = rtnl_dump_filter(&rth, accept_maddr, &ctx);
+	rth.flags &= ~RTNL_HANDLE_F_SUPPRESS_NLERR;
+
+	/* Kernels that dump multicast addresses but do not report the
+	 * users count via IFA_MC_USERS cannot replace procfs.
+	 */
+	if (err < 0 || ctx.mc_users_missing) {
+		maddr_clear(ctx.list);
+		return -1;
+	}
+
+	while ((ma = ctx.list) != NULL) {
+		ctx.list = ma->next;
+		maddr_ins(result_p, ma);
+	}
+
+	return 0;
+}
+
 static void print_maddr(FILE *fp, struct ma_info *list)
 {
 	print_string(PRINT_FP, NULL, "\t", NULL);
@@ -291,12 +379,25 @@ static int multiaddr_list(int argc, char **argv)
 		argv++; argc--;
 	}
 
+	if (filter.dev) {
+		filter.index = ll_name_to_index(filter.dev);
+		/* an unknown device has no multicast addresses */
+		if (!filter.index) {
+			print_mlist(stdout, NULL);
+			return 0;
+		}
+	}
+
 	if (!filter.family || filter.family == AF_PACKET)
 		read_dev_mcast(&list);
-	if (!filter.family || filter.family == AF_INET)
-		read_igmp(&list);
-	if (!filter.family || filter.family == AF_INET6)
-		read_igmp6(&list);
+	if (!filter.family || filter.family == AF_INET) {
+		if (read_maddr_netlink(AF_INET, &list) < 0)
+			read_igmp(&list);
+	}
+	if (!filter.family || filter.family == AF_INET6) {
+		if (read_maddr_netlink(AF_INET6, &list) < 0)
+			read_igmp6(&list);
+	}
 	print_mlist(stdout, list);
 	maddr_clear(list);
 	return 0;
