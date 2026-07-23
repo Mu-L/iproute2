@@ -661,11 +661,8 @@ static void print_flag(struct rtattr *attrs[], const char *desc,
 
 static void print_key(struct rtattr *key)
 {
-	SPRINT_BUF(keyid);
-
-	print_string(PRINT_ANY, "key", " key %s\n",
-		     hexstring_n2a(RTA_DATA(key), RTA_PAYLOAD(key),
-				   keyid, sizeof(keyid)));
+	print_hexstring("key", " key %s\n",
+			RTA_DATA(key), RTA_PAYLOAD(key));
 }
 
 #define CIPHER_NAME_GCM_AES_128 "GCM-AES-128"

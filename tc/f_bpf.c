@@ -241,11 +241,9 @@ static int bpf_print_opt(const struct filter_util *qu, FILE *f,
 	if (tb[TCA_BPF_ID])
 		dump_ok = bpf_dump_prog_info(f, rta_getattr_u32(tb[TCA_BPF_ID]));
 	if (!dump_ok && tb[TCA_BPF_TAG]) {
-		SPRINT_BUF(b);
-
-		print_string(PRINT_ANY, "tag", "tag %s ",
-			     hexstring_n2a(RTA_DATA(tb[TCA_BPF_TAG]),
-			     RTA_PAYLOAD(tb[TCA_BPF_TAG]), b, sizeof(b)));
+		print_hexstring("tag", "tag %s ",
+				RTA_DATA(tb[TCA_BPF_TAG]),
+				RTA_PAYLOAD(tb[TCA_BPF_TAG]));
 	}
 
 	if (tb[TCA_BPF_POLICE]) {

@@ -176,7 +176,6 @@ int bpf_dump_prog_info(FILE *f, uint32_t id)
 	struct bpf_prog_info info = {};
 	uint32_t len = sizeof(info);
 	int fd, ret, dump_ok = 0;
-	SPRINT_BUF(tmp);
 
 	open_json_object("prog");
 	print_uint(PRINT_ANY, "id", "id %u ", id);
@@ -190,9 +189,8 @@ int bpf_dump_prog_info(FILE *f, uint32_t id)
 		int jited = !!info.jited_prog_len;
 
 		print_string(PRINT_ANY, "name", "name %s ", info.name);
-		print_string(PRINT_ANY, "tag", "tag %s ",
-			     hexstring_n2a(info.tag, sizeof(info.tag),
-					   tmp, sizeof(tmp)));
+		print_hexstring("tag", "tag %s ",
+				info.tag, sizeof(info.tag));
 		print_uint(PRINT_JSON, "jited", NULL, jited);
 		if (jited && !is_json_context())
 			fprintf(f, "jited ");

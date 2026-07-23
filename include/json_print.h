@@ -84,6 +84,9 @@ _PRINT_FUNC(float, double)
 _PRINT_FUNC(tv, const struct timeval *)
 #undef _PRINT_FUNC
 
+void print_hexstring(const char *key, const char *fmt,
+		     const __u8 *data, unsigned int len);
+
 #define _PRINT_NAME_VALUE_FUNC(type_name, type, format_char)		  \
 	void print_##type_name##_name_value(const char *name, type value) \
 

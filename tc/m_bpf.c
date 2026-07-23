@@ -183,12 +183,9 @@ static int bpf_print_opt(const struct action_util *au, FILE *f, struct rtattr *a
 		d_ok = bpf_dump_prog_info(f,
 					  rta_getattr_u32(tb[TCA_ACT_BPF_ID]));
 	if (!d_ok && tb[TCA_ACT_BPF_TAG]) {
-		SPRINT_BUF(b);
-
-		print_string(PRINT_ANY, "tag", "tag %s ",
-			     hexstring_n2a(RTA_DATA(tb[TCA_ACT_BPF_TAG]),
-			     RTA_PAYLOAD(tb[TCA_ACT_BPF_TAG]),
-			     b, sizeof(b)));
+		print_hexstring("tag", "tag %s ",
+				RTA_DATA(tb[TCA_ACT_BPF_TAG]),
+				RTA_PAYLOAD(tb[TCA_ACT_BPF_TAG]));
 	}
 
 	print_action_control("default-action ", parm->action, _SL_);
