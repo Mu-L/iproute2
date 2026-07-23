@@ -65,7 +65,9 @@ ip-nexthop \- nexthop object management
 .BR onlink " ] [ "
 .B encap
 .IR ENCAP " ] [ "
-.BR fdb " ] | "
+.BR fdb " ] [ "
+.B dst_port
+.IR PORT " ] | "
 .B  group
 .IR GROUP " [ "
 .BR hw_stats " { "
@@ -210,6 +212,12 @@ A fdb nexthop group can only have fdb nexthops.
 Example: Used to represent a vxlan remote vtep ip. layer-2 vxlan
 fdb entry pointing to an ecmp nexthop group containing multiple
 remote vtep ips.
+.TP
+.BI dst_port " PORT"
+UDP destination port to use for an fdb nexthop, in place of the VXLAN
+device's default port. Only valid together with
+.B fdb
+and a gateway.
 .RE
 
 .TP
@@ -309,6 +317,11 @@ Adds a nexthop with id 4. The nexthop is a group using nexthops with ids
 ip nexthop add id 5 via 192.168.1.2 fdb
 .RS 4
 Adds a fdb nexthop with id 5.
+.RE
+.PP
+ip nexthop add id 6 via 192.168.1.2 fdb dst_port 4790
+.RS 4
+Adds a fdb nexthop with id 6 forwarding to 192.168.1.2 on UDP port 4790.
 .RE
 .PP
 ip nexthop add id 7 group 5/6 fdb

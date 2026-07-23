@@ -52,7 +52,7 @@ static void usage(void)
 		"SELECTOR := [ id ID ] [ dev DEV ] [ vrf NAME ] [ master DEV ]\n"
 		"            [ groups ] [ fdb ]\n"
 		"BUCKET_SELECTOR := SELECTOR | [ nhid ID ]\n"
-		"NH := { blackhole | [ via ADDRESS ] [ dev DEV ] [ onlink ]\n"
+		"NH := { blackhole | [ via ADDRESS ] [ dev DEV ] [ onlink ] [ dst_port PORT ]\n"
 		"        [ encap ENCAPTYPE ENCAPHDR ] |\n"
 		"        group GROUP [ fdb ] [ type TYPE [ TYPE_ARGS ] ] }\n"
 		"GROUP := [ <id[,weight]>/<id[,weight]>/... ]\n"
@@ -531,6 +531,8 @@ static int ipnh_parse_nhmsg(FILE *fp, const struct nhmsg *nhm, int len,
 
 	nhe->nh_blackhole = !!tb[NHA_BLACKHOLE];
 	nhe->nh_fdb = !!tb[NHA_FDB];
+	if (tb[NHA_DST_PORT])
+		nhe->nh_dst_port = rta_getattr_be16(tb[NHA_DST_PORT]);
 
 	nhe->nh_family = nhm->nh_family;
 	nhe->nh_protocol = nhm->nh_protocol;
@@ -593,7 +595,11 @@ static void __print_nexthop_entry(FILE *fp, const char *jsobj,
 	print_rt_flags(fp, nhe->nh_flags);
 
 	if (nhe->nh_fdb)
-		print_null(PRINT_ANY, "fdb", "fdb", NULL);
+		print_null(PRINT_ANY, "fdb", "fdb ", NULL);
+
+	if (nhe->nh_dst_port)
+		print_uint(PRINT_ANY, "dst_port", "dst_port %u ",
+			   nhe->nh_dst_port);
 
 	if ((show_details > 0 || show_stats) && nhe->nh_hw_stats_supported) {
 		open_json_object("hw_stats");
@@ -1112,6 +1118,14 @@ static int ipnh_modify(int cmd, unsigned int flags, int argc, char **argv)
 				req.nhm.nh_family = AF_INET;
 		} else if (!strcmp(*argv, "fdb")) {
 			addattr_l(&req.n, sizeof(req), NHA_FDB, NULL, 0);
+		} else if (!strcmp(*argv, "dst_port")) {
+			__u16 port;
+
+			NEXT_ARG();
+			if (get_u16(&port, *argv, 0))
+				invarg("\"dst_port\" value is invalid\n", *argv);
+			addattr16(&req.n, sizeof(req), NHA_DST_PORT,
+				  htons(port));
 		} else if (!strcmp(*argv, "onlink")) {
 			nh_flags |= RTNH_F_ONLINK;
 		} else if (!strcmp(*argv, "group")) {

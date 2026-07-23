@@ -33,6 +33,7 @@ struct nh_entry {
 
 	bool			nh_blackhole;
 	bool			nh_fdb;
+	__u16			nh_dst_port;
 
 	bool			nh_hw_stats_supported;
 	bool			nh_hw_stats_enabled;
