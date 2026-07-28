@@ -159,30 +159,11 @@ int get_operstate(const char *name)
 
 static void print_queuelen(FILE *f, struct rtattr *tb[IFLA_MAX + 1])
 {
-	int qlen;
+	if (tb[IFLA_TXQLEN]) {
+		__u32 qlen = rta_getattr_u32(tb[IFLA_TXQLEN]);
 
-	if (tb[IFLA_TXQLEN])
-		qlen = rta_getattr_u32(tb[IFLA_TXQLEN]);
-	else {
-		struct ifreq ifr = {};
-		int s = socket(AF_INET, SOCK_STREAM, 0);
-
-		if (s < 0)
-			return;
-
-		strcpy(ifr.ifr_name, rta_getattr_str(tb[IFLA_IFNAME]));
-		if (ioctl(s, SIOCGIFTXQLEN, &ifr) < 0) {
-			fprintf(stderr,
-				"ioctl(SIOCGIFTXQLEN) failed: %s\n",
-				strerror(errno));
-			close(s);
-			return;
-		}
-		close(s);
-		qlen = ifr.ifr_qlen;
+		print_uint(PRINT_ANY, "txqlen", "qlen %u", qlen);
 	}
-	if (qlen)
-		print_int(PRINT_ANY, "txqlen", "qlen %d", qlen);
 }
 
 static const char *link_modes[] = {
