@@ -1264,22 +1264,15 @@ int print_linkinfo(struct nlmsghdr *n, void *arg)
 				     rta_getattr_str(tb[IFLA_PHYS_PORT_NAME]));
 
 		if (tb[IFLA_PHYS_PORT_ID]) {
-			print_string(PRINT_ANY,
-				     "phys_port_id",
-				     "portid %s ",
-				     hexstring_n2a(
-					     RTA_DATA(tb[IFLA_PHYS_PORT_ID]),
-					     RTA_PAYLOAD(tb[IFLA_PHYS_PORT_ID]),
-					     b1, sizeof(b1)));
+			print_hexstring("phys_port_id", "portid %s ",
+					RTA_DATA(tb[IFLA_PHYS_PORT_ID]),
+					RTA_PAYLOAD(tb[IFLA_PHYS_PORT_ID]));
 		}
 
 		if (tb[IFLA_PHYS_SWITCH_ID]) {
-			print_string(PRINT_ANY,
-				     "phys_switch_id",
-				     "switchid %s ",
-				     hexstring_n2a(RTA_DATA(tb[IFLA_PHYS_SWITCH_ID]),
-						   RTA_PAYLOAD(tb[IFLA_PHYS_SWITCH_ID]),
-						   b1, sizeof(b1)));
+			print_hexstring("phys_switch_id", "switchid %s ",
+					RTA_DATA(tb[IFLA_PHYS_SWITCH_ID]),
+					RTA_PAYLOAD(tb[IFLA_PHYS_SWITCH_ID]));
 		}
 
 		if (tb[IFLA_PARENT_DEV_BUS_NAME]) {

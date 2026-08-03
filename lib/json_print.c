@@ -179,6 +179,19 @@ int print_color_string(enum output_type type,
 	return ret;
 }
 
+/* Print binary data as a hex string. The buffer is sized to the input,
+ * so keys of any length are printed in full rather than truncated.
+ */
+void print_hexstring(const char *key, const char *fmt,
+		     const __u8 *data, unsigned int len)
+{
+	int blen = 2 * len + 1;
+	char buf[blen];
+
+	print_string(PRINT_ANY, key, fmt,
+		     hexstring_n2a(data, len, buf, blen));
+}
+
 /*
  * value's type is bool. When using this function in FP context you can't pass
  * a value to it, you will need to use "is_json_context()" to have different

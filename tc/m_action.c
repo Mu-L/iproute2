@@ -401,12 +401,9 @@ static int tc_print_one_action(FILE *f, struct rtattr *arg, bool bind)
 		print_nl();
 	}
 	if (tb[TCA_ACT_COOKIE]) {
-		int strsz = RTA_PAYLOAD(tb[TCA_ACT_COOKIE]);
-		char b1[strsz * 2 + 1];
-
-		print_string(PRINT_ANY, "cookie", "\tcookie %s",
-			     hexstring_n2a(RTA_DATA(tb[TCA_ACT_COOKIE]),
-					   strsz, b1, sizeof(b1)));
+		print_hexstring("cookie", "\tcookie %s",
+				RTA_DATA(tb[TCA_ACT_COOKIE]),
+				RTA_PAYLOAD(tb[TCA_ACT_COOKIE]));
 		print_nl();
 	}
 	if (tb[TCA_ACT_FLAGS] || tb[TCA_ACT_IN_HW_COUNT]) {
