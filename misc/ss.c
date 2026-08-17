@@ -2314,9 +2314,13 @@ void *parse_hostcond(char *addr, bool is_port)
 
 		port = find_port(addr, is_port);
 
-		if (port && strcmp(port, "*") &&
-		    get_u32((__u32 *)&a.port, port, 0))
-			return NULL;
+		if (port && strcmp(port, "*")) {
+			__u32 vport;
+
+			if (get_u32(&vport, port, 0))
+				return NULL;
+			a.port = vport;
+		}
 
 		if (!is_port && addr[0] && strcmp(addr, "*")) {
 			a.addr.bitlen = 32;
