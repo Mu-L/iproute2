@@ -41,13 +41,15 @@ static void explain(void)
 static int get_u32_handle(__u32 *handle, const char *str)
 {
 	__u32 htid = 0, hash = 0, nodeid = 0;
-	char *tmp = strchr(str, ':');
+	const char *colon = strchr(str, ':');
+	char *tmp;
 
-	if (tmp == NULL) {
+	if (colon == NULL) {
 		if (memcmp("0x", str, 2) == 0)
 			return get_u32(handle, str, 16);
 		return -1;
 	}
+
 	htid = strtoul(str, &tmp, 16);
 	if (tmp == str && *str != ':' && *str != 0)
 		return -1;
